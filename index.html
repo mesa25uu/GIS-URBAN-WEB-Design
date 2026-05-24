@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Urban Map - Oxnehaga</title>
+<link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+
+<style>
+html, body { height:100%; width:100%; margin:0; padding:0; display:flex; font-family:'Segoe UI', sans-serif; }
+#sidePanel { width:280px; background:#1f2a38; color:white; padding:20px; overflow-y:auto; }
+#viewDiv { flex:1; height:100vh; position:relative; }
+#infoPanel { position:absolute; top:20px; right:20px; width:320px; max-height:70vh; overflow-y:auto; background:white; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.4); border:1px solid #ccc; z-index:100; }
+.info-header { background:#4A90E2; color:white; padding:12px 15px; border-radius:8px 8px 0 0; font-weight:bold; }
+#infoContent { padding:15px; font-size:13px; line-height:1.6; }
+.feature-title { color:#4A90E2; font-weight:bold; font-size:14px; margin-bottom:10px; }
+.feature-section { background:#f5f5f5; padding:10px; border-radius:4px; margin:10px 0; border-left:3px solid #4A90E2; }
+.feature-label { color:#666; font-weight:bold; font-size:11px; text-transform:uppercase; margin-top:8px; margin-bottom:3px; }
+.feature-value { color:#333; font-size:12px; }
+#project4Btn { width:100%; padding:10px; background:#4A90E2; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-bottom:10px; font-weight:bold; transition:0.3s; }
+#project4Btn:hover { background:#357ABD; }
+.layer-item { margin-bottom:8px; display:flex; align-items:center; background:rgba(255,255,255,0.1); padding:8px; border-radius:4px; }
+.layer-item input { margin-right:10px; }
+.dropdown { margin-bottom:10px; }
+.dropdown-header { cursor:pointer; font-weight:bold; padding:8px; background:rgba(255,255,255,0.15); border-radius:4px; display:flex; justify-content:space-between; align-items:center; transition:0.2s; }
+.dropdown-header:hover { background:rgba(255,255,255,0.25); }
+.dropdown-arrow { transition:0.3s; }
+.dropdown-content { display:none; margin-top:5px; padding-left:10px; }
+table { width:100%; border-collapse:collapse; }
+td { padding:6px 4px; border-bottom:1px solid #eee; vertical-align:top; }
+.attr-key { font-weight:bold; color:#666; width:45%; font-size:11px; text-transform:uppercase; }
+</style>
+</head>
+
+<body>
+<div id="sidePanel">
+  <h2 style="color:#4A90E2;margin:0;">GIS-Web-Urban</h2>
+  <p style="font-size:11px;color:#999;margin:5px 0 15px 0;">Urban Accessibility Analysis - Oxnehaga</p>
+  
+  <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:4px;margin-bottom:15px;font-size:11px;line-height:1.5;">
+    <strong style="color:#4A90E2;">Project Overview:</strong><br>
+    Integrated GIS-BIM analysis examining accessibility to schools, healthcare, public transport, and essential services.
+  </div>
+  
+  <div style="background:rgba(74,144,226,0.1);padding:10px;border-radius:4px;margin-bottom:15px;font-size:10px;line-height:1.4;border-left:3px solid #4A90E2;">
+    <strong>Key Datasets (10 layers):</strong><br>
+    • 3D Buildings & boundaries<br>
+    • School routes & accessibility<br>
+    • Healthcare walking zones<br>
+    • Public transportation network<br>
+    • Service distribution points
+  </div>
+  
+  <hr style="opacity:0.2;margin:15px 0;">
+  <div id="controls"></div>
+  
+  <hr style="opacity:0.2;margin:15px 0;">
+  <div style="font-size:10px;color:#888;text-align:center;">
+    <p style="margin:5px 0;">💡 Tools: ArcGIS JS 4.29<br>📊 Format: GeoJSON (WGS84)<br>📍 Tech: ES6, WebGL</p>
+  </div>
+</div>
+
+<div id="viewDiv">
+  <div id="infoPanel">
+    <div class="info-header">Feature Details</div>
+    <button id="project4Btn" style="display:none;">Open Project 4</button>
+    <div id="infoContent">Click on a feature to see all attributes.</div>
+  </div>
+</div>
+
+<script src="https://js.arcgis.com/4.29/"></script>
+<script>
+require([
+  "esri/Map", "esri/views/SceneView", "esri/layers/GeoJSONLayer", "esri/widgets/Home"
+], function(Map, SceneView, GeoJSONLayer, Home) {
+
+  const map = new Map({ basemap: "topo-vector", ground: "world-elevation" });
+  const view = new SceneView({
+    container: "viewDiv",
+    map: map,
+    camera: { position: { longitude: 14.2622409, latitude: 57.7781582, z: 5000 }, tilt: 0 },
+    popupEnabled: false
+  });
+
+  view.ui.add(new Home({ view: view }), "top-left");
+
+  // ---------------- RENDERERS ----------------
+  // Option A: robust simple marker (no external icon)
+  const busRenderer = {
+    type: "simple",
+    symbol: {
+      type: "simple-marker",
+      color: "#FFD21E",                // yellow
+      size: 11,
+      style: "circle",
+      outline: { color: "#1b1b1b", width: 1.5 }
+    }
+  };
+
+  const schoolIconRenderer = {
+    type: "simple",
+    symbol: {
+      type: "picture-marker",
+      url: "https://static.arcgis.com/images/Symbols/Education/School.png",
+      width: "22px", height: "22px"
+    }
+  };
+
+  const areaRenderer = { type:"simple", symbol:{ type:"simple-fill", color:[0,0,0,0], outline:{ color:"#00aa00", width:3 } } };
+  const trainLineRenderer = { type:"simple", symbol:{ type:"simple-line", color:"#ff0000", width:4, style:"dash" } };
+  const schoolRouteRenderer = { type:"simple", symbol:{ type:"simple-line", color:"#8A2BE2", width:5 } };
+  const vardcentralRenderer = { type:"simple", symbol:{ type:"simple-fill", color:[0,200,0,0.35], outline:{ color:[0,150,0], width:2 } } };
+  const distanceRenderer = { type:"simple", symbol:{ type:"simple-fill", color:[255,165,0,0.3], outline:{ color:[255,140,0], width:2 } } };
+
+  // ---------------- LAYERS ----------------
+  const mainByggnad = new GeoJSONLayer({
+    url: "Main_byggnad.geojson",
+    elevationInfo: { mode: "on-the-ground" },
+    renderer: {
+      type: "unique-value", field: "objektidentitet",
+      defaultSymbol: {
+        type: "polygon-3d",
+        symbolLayers: [{
+          type: "extrude", size: 2,
+          material: { color: "#d9d9d9" },
+          edges: { type: "solid", color: "#888", size: 0.6 }
+        }]
+      },
+      uniqueValueInfos: [{
+        value: "86068c15-afde-4284-90fc-ad8735b25416",
+        symbol: {
+          type: "polygon-3d",
+          symbolLayers: [{
+            type: "extrude", size: 2,
+            material: { color: "#ff0000" },
+            edges: { type: "solid", color: "#888", size: 0.6 }
+          }]
+        }
+      }]
+    },
+    outFields: ["*"]
+  });
+
+  const areaLayer = new GeoJSONLayer({ url: "Oxnehaga-Area.geojson", renderer: areaRenderer, outFields: ["*"] });
+  const schoolLayer = new GeoJSONLayer({ url: "Oxnehaga_school.geojson", renderer: schoolIconRenderer, elevationInfo: { mode: "on-the-ground" }, outFields: ["*"] });
+  const schoolRoute = new GeoJSONLayer({ url: "Oxnehaga_school_route.geojson", renderer: schoolRouteRenderer, outFields: ["*"] });
+  const trainStation = new GeoJSONLayer({ url: "Huskvarna_train_station.geojson", outFields: ["*"] });
+  const trainLines = new GeoJSONLayer({ url: "train.geojson", renderer: trainLineRenderer, outFields: ["*"] });
+  const distansLayer = new GeoJSONLayer({ url: "Distans_from_centrum.geojson", visible: false, renderer: distanceRenderer, outFields: ["*"] });
+  const vardcentralWalking = new GeoJSONLayer({ url: "Vardcentral_walking_distance.geojson", renderer: vardcentralRenderer, outFields: ["*"] });
+  const kindergartenLayer = new GeoJSONLayer({ url: "Kinder_Garden.geojson", outFields: ["*"] });
+  const schoolServiceLayer = new GeoJSONLayer({ url: "Oxnehaga_school.geojson", renderer: schoolIconRenderer, elevationInfo: { mode: "on-the-ground" }, outFields: ["*"] });
+
+  // Bus stop layer using simple marker
+  const busStopLayer = new GeoJSONLayer({
+    url: "Bus_stop.geojson",                 // ensure path/case matches your repo
+    renderer: busRenderer,
+    elevationInfo: { mode: "on-the-ground" },
+    outFields: ["*"]
+  });
+
+  map.addMany([
+    areaLayer, mainByggnad, schoolLayer, schoolRoute,
+    trainStation, trainLines, distansLayer, vardcentralWalking,
+    kindergartenLayer, schoolServiceLayer, busStopLayer
+  ]);
+
+  // Optional diagnostics to confirm bus features are loading
+  busStopLayer.when(() => {
+    return busStopLayer.queryFeatureCount();
+  }).then(c => console.log("[Bus] feature count:", c))
+    .catch(err => console.error("[Bus] load error:", err));
+
+  // ---------------- UI & TOGGLES ----------------
+  const controls = document.getElementById("controls");
+  document.getElementById("project4Btn").onclick = () => { window.location.href = "Project4.html"; };
+
+  function createDropdown(title){
+    const container=document.createElement("div"); container.className="dropdown";
+    const header=document.createElement("div"); header.className="dropdown-header";
+    const text=document.createElement("span"); text.innerText=title;
+    const arrow=document.createElement("span"); arrow.innerHTML="▶"; arrow.className="dropdown-arrow";
+    header.appendChild(text); header.appendChild(arrow);
+    const content=document.createElement("div"); content.className="dropdown-content";
+    header.onclick=()=>{
+      const open=content.style.display==="block";
+      content.style.display=open?"none":"block";
+      arrow.style.transform=open?"rotate(0deg)":"rotate(90deg)";
+    };
+    container.appendChild(header); container.appendChild(content); controls.appendChild(container);
+    return content;
+  }
+
+  function addToggle(label,layers,parent){
+    const div=document.createElement("div"); div.className="layer-item";
+    const chk=document.createElement("input"); chk.type="checkbox"; chk.checked=layers.every(l=>l.visible);
+    chk.onchange=(e)=>layers.forEach(l=>l.visible=e.target.checked);
+    const span=document.createElement("span"); span.innerText=label;
+    div.appendChild(chk); div.appendChild(span); parent.appendChild(div);
+  }
+
+  const generalGroup=createDropdown("General Information");
+  addToggle("Area Boundary",[areaLayer],generalGroup);
+  addToggle("Main Buildings",[mainByggnad],generalGroup);
+  addToggle("Train Info",[trainStation,trainLines],generalGroup);
+
+  const analysGroup=createDropdown("Analys");
+  addToggle("Route from school to train station",[schoolLayer,schoolRoute],analysGroup);
+  addToggle("Healthcare Walking Distance",[vardcentralWalking],analysGroup);
+  addToggle("Distance From Center",[distansLayer],analysGroup);
+
+  const servicesGroup=createDropdown("Services");
+  addToggle("Kindergarten",[kindergartenLayer],servicesGroup);
+  addToggle("School",[schoolServiceLayer],servicesGroup);
+  addToggle("Bus Stop",[busStopLayer],servicesGroup);
+
+  // ---------------- HIT TEST ----------------
+  view.on("click", (event) => {
+    view.hitTest(event).then((response) => {
+      const results = response.results.filter(r => r.graphic && r.graphic.layer && r.graphic.layer.type==="geojson");
+      if(results.length > 0){
+        let attr = results[0].graphic.attributes;
+        const project4Btn = document.getElementById("project4Btn");
+        const layerName = results[0].graphic.layer.title || "Feature";
+        
+        if (attr && attr.objektidentitet === "86068c15-afde-4284-90fc-ad8735b25416") {
+          project4Btn.style.display = "";
+        } else {
+          project4Btn.style.display = "none";
+        }
+        
+        let html = `<div class="feature-title">📍 ${layerName}</div>`;
+        html += '<div class="feature-section">';
+        
+        let attrCount = 0;
+        for(let key in attr){
+          if(attr[key] !== null && attr[key] !== undefined && attr[key] !== ""){
+            html += `<div class="feature-label">${key}</div>`;
+            html += `<div class="feature-value">${attr[key]}</div>`;
+            attrCount++;
+          }
+        }
+        if(attrCount === 0) html += '<div class="feature-value"><em>No attributes available</em></div>';
+        html += '</div>';
+        
+        document.getElementById("infoContent").innerHTML = html;
+      } else {
+        document.getElementById("project4Btn").style.display = "none";
+        document.getElementById("infoContent").innerHTML = '<div style="color:#999;font-style:italic;">👆 Click on a feature to see details</div>';
+      }
+    });
+  });
+
+});
+</script>
+</body>
+</html>
