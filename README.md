@@ -1,5 +1,7 @@
 # GIS-Web-Urban: Urban Planning Analysis for Oxnehaga Area
 
+Access GIS-Web Design here ! https://mesa25uu.github.io/GIS-URBAN-WEB-Design/
+
 ## Project Context & Overview
 
 **Course:** GIS + BIM Assignment (Urban Planning)
